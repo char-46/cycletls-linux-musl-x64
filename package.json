@@ -1,0 +1,33 @@
+{
+  "name": "@char46/cycletls-linux-musl-x64",
+  "version": "2.0.5",
+  "description": "Static musl build of the CycleTLS Go server binary (for Alpine/musl Node environments). Companion to the `cycletls` npm package (JS side stays there); this package only ships the linux x64 musl executable.",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/char-46/cycletls-linux-musl-x64.git"
+  },
+  "files": [
+    "index",
+    "README.md",
+    "LICENSE"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "musl"
+  ],
+  "keywords": [
+    "cycletls",
+    "musl",
+    "alpine",
+    "utls",
+    "ja3",
+    "fingerprint",
+    "static-binary"
+  ]
+}

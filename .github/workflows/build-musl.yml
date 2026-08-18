@@ -1,0 +1,88 @@
+name: Build and publish musl binary
+
+on:
+  workflow_dispatch:
+    inputs:
+      # 上游 Danny-Dasilva/CycleTLS 的 commit SHA，必须与 npm cycletls 的 JS 侧版本对应
+      # 2.0.5 => a96895f4（"Release: ✨ Custom SNI, and Ja4r documentation [2.0.5]"）
+      ref:
+        description: 'Upstream commit SHA (must match npm cycletls JS version)'
+        required: true
+        default: 'a96895f4'
+      version:
+        description: 'npm version for this package'
+        required: true
+        default: '2.0.5'
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout this repo (packaging)
+        uses: actions/checkout@v4
+
+      - name: Checkout CycleTLS source at pinned ref (fork mirror)
+        uses: actions/checkout@v4
+        with:
+          repository: char-46/CycleTLS
+          ref: ${{ github.event.inputs.ref }}
+          path: cycletls-src
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - name: Build static binary (musl-compatible)
+        working-directory: cycletls-src/src
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          go build -trimpath -ldflags="-s -w" -o "$GITHUB_WORKSPACE/index" .
+          chmod +x "$GITHUB_WORKSPACE/index"
+
+      - name: Verify static linking (no PT_INTERP)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq file >/dev/null
+          file index
+          # 无 ELF 解释器 = 静态二进制，musl/glibc 通吃
+          if readelf -l index | grep -q 'INTERP'; then
+            echo '::error::binary is dynamically linked (PT_INTERP found), expected fully static'
+            exit 1
+          fi
+          readelf -l index | head -20
+
+      - name: Smoke test (spawn + listen)
+        run: |
+          WS_PORT=29119 ./index &
+          BIN_PID=$!
+          sleep 2
+          if ! kill -0 $BIN_PID 2>/dev/null; then
+            echo '::error::binary exited immediately'
+            exit 1
+          fi
+          if ! (echo > /dev/tcp/127.0.0.1/29119) 2>/dev/null; then
+            echo '::error::binary alive but not listening on WS_PORT'
+            kill -9 $BIN_PID 2>/dev/null || true
+            exit 1
+          fi
+          echo 'smoke test OK: alive and listening'
+          kill -9 $BIN_PID 2>/dev/null || true
+
+      - name: Fetch upstream LICENSE for compliance
+        run: cp cycletls-src/LICENSE ./LICENSE
+
+      - name: Set version
+        run: npm version ${{ github.event.inputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Pack (dry run to inspect)
+        run: npm pack --dry-run
+
+      - name: Publish
+        if: ${{ !env.ACT }}
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
