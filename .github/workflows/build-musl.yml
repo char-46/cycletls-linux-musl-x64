@@ -21,12 +21,18 @@ jobs:
       - name: Checkout this repo (packaging)
         uses: actions/checkout@v4
 
-      - name: Checkout CycleTLS source at pinned ref (fork mirror)
+      - name: Checkout CycleTLS source (fork mirror, full history)
         uses: actions/checkout@v4
         with:
           repository: char-46/CycleTLS
-          ref: ${{ github.event.inputs.ref }}
+          fetch-depth: 0
           path: cycletls-src
+
+      - name: Pin to upstream commit
+        working-directory: cycletls-src
+        run: |
+          git checkout ${{ github.event.inputs.ref }}
+          echo "building $(git rev-parse HEAD): $(git log -1 --format=%s)"
 
       - name: Set up Go
         uses: actions/setup-go@v5
